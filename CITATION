@@ -1,0 +1,25 @@
+citHeader("To cite BioNet in publications use one of these references:")
+
+citEntry(entry = "Article",
+  author = "Daniela Beisser and Gunnar W. Klau and Thomas Dandekar and Tobias Mueller and Marcus Dittrich",
+  title = "BioNet: an R-package for the Functional Analysis of Biological Networks",
+  journal = "Bioinformatics",
+  year = "2010",
+  volume = "26",
+  pages = "1129-1130",
+  number = "8",
+  textVersion = "Beisser, D.; Klau, G. W.; Dandekar, T.; Mueller, T. and Dittrich, M. (2009). BioNet an R-package for the Functional Analysis of Biological Networks. Bioinformatics 26, 1129-1130."
+)
+
+citEntry(entry = "Article",
+  author = "Marcus T Dittrich and Gunnar W Klau and Andreas Rosenwald and Thomas
+	Dandekar and Tobias Mueller",
+  title = "Identifying functional modules in protein-protein interaction networks:
+	an integrated exact approach",
+  journal = "Bioinformatics",
+  year = "2008",
+  volume = "24",
+  pages = "i223--i231",
+  number = "13",
+  textVersion = "Dittrich, M. T.; Klau, G. W.; Rosenwald, A.; Dandekar, T. and Mueller, T. (2008). Identifying functional modules in protein-protein interaction networks: an integrated exact approach. Bioinformatics 24, i223-i231."
+)

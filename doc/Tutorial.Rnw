@@ -1,0 +1,681 @@
+\documentclass[a4paper]{article}
+\newcommand{\obacht}[2][nobody]{\marginpar{\raggedright \tiny \textbf{obacht:} #2 (#1)}}
+% *** OFF
+%\newcommand{\obacht}[2]{}
+
+\usepackage{amsmath}%
+\usepackage{amsfonts}%
+\usepackage{amssymb}%
+\usepackage{graphicx}
+\usepackage{xspace}
+\usepackage[numbers,sort&compress]{natbib}
+\usepackage{caption}
+\usepackage{url}
+
+%\VignetteIndexEntry{BioNet Tutorial}
+
+\newcommand{\FDR}{$\mathit{FDR}$\xspace}
+\newcommand{\heinz}{\texttt{heinz}\xspace}
+\newcommand{\BioNet}{\textsf{BioNet}\xspace}
+\SweaveOpts{keep.source=FALSE}
+\parindent=0pt
+
+\title{\BioNet Tutorial}
+
+\author{Daniela Beisser and Marcus Dittrich}
+
+\begin{document}
+\SweaveOpts{concordance=TRUE}
+
+\maketitle
+
+\begin{abstract}
+The first part of this tutorial exemplifies how an integrated network analysis can be conducted using the \BioNet package. 
+Here we will integrate gene expression data from different lymphoma subtypes and clinical survival data 
+with a comprehensive protein-protein interaction (PPI) network based on HPRD. This is shown first in a quick start 
+and later in a more detailed analysis. The second part will focus on the integration of gene expression data from Affymetrix single-channel 
+microarrays with the human PPI network.
+\end{abstract}
+
+
+\section{Quick Start}
+
+The quick start section gives a short overview of the essential \BioNet methods and their application.
+A detailed analysis of the same data set of diffuse large B-cell lymphomas is presented in section \ref{sec:dbcl} . \\
+The major aim of the presented integrated network analysis is to identify modules, which are differentially expressed between two different 
+lymphoma subtypes (ABC and GCB) and simultaneously are risk associated (measured by the survival analysis). 
+
+First of all, we load the \BioNet package and the required data sets, containing a human protein-protein interaction network and 
+p-values derived from differential expression and survival analysis.
+<<echo=F>>=
+options(width=60)
+ps.options(family="sans")
+@
+
+<<>>= 
+library(BioNet)
+library(DLBCL)
+data(dataLym)
+data(interactome)
+@
+
+Then we need to aggregate these two p-values into one p-value.
+<<>>= 
+pvals <- cbind(t=dataLym$t.pval, s=dataLym$s.pval)
+rownames(pvals) <- dataLym$label
+pval <- aggrPvals(pvals, order=2, plot=FALSE)
+@
+
+Next a subnetwork of the complete network is derived, containing all the proteins which are represented by probesets on the microarray. And self-loops are removed.
+<<>>= 
+subnet <- subNetwork(dataLym$label, interactome)
+subnet <- rmSelfLoops(subnet)
+subnet
+@
+
+To score each node of the network we fit a Beta-uniform mixture model (BUM) \citep{Pounds2003} to the p-value distribution and subsequently 
+use the parameters of the model for the scoring function \citep{Dittrich2008}.
+A false-discovery rate (FDR) of 0.001 is chosen.
+<<>>= 
+fb <- fitBumModel(pval, plot=FALSE)
+scores <- scoreNodes(subnet, fb, fdr=0.001)
+@
+
+Here we use a fast heuristic approach to calculate an approximation to the optimal scoring subnetwork. 
+An optimal solution can be calculated using the \heinz  algorithm \citep{Dittrich2008} requiring a commercial CPLEX license, 
+see section \ref{sec:mss} and \ref{sec:installation} for installation.
+
+<<>>=
+module <- runFastHeinz(subnet, scores)
+logFC <- dataLym$diff
+names(logFC) <- dataLym$label
+@
+
+Both 2D and 3D module visualization procedures are available in \BioNet. For a 3D visualization, see section \ref{sec:mss}. 
+Alternatively, the network could be easily exported in Cytoscape format, see section \ref{sec:mss2}.   
+
+\begin{center}
+<<fig=T>>=
+plotModule(module, scores=scores, diff.expr=logFC)
+@
+\captionof{figure}{Resultant functional module. Differential expression between ABC and GCB B-cell lymphoma is coloured in red and green, where green shows an upregulation in ACB and red an upregulation in GBC. 
+The shape of the nodes depicts the score: rectangles indicate a negative score, circles a positive score.}
+\label{fig:module1}
+\end{center}
+
+
+\section{Heuristics to Calculate High-scoring Subnetworks}
+
+To calculate high-scoring subnetworks without an available CPLEX license
+a heuristics is included in the \BioNet package.
+The following depicts a short outline of the algorithm:
+\begin{enumerate}
+\item In the first step all positive connected nodes are aggregated into meta-nodes.
+\item By defining an edge score based on the node's scores that are on the endpoints of an edge, the node scores are transfered to the edges.
+\item On these edge scores a minimum spanning tree (MST) is calculated.
+\item All paths between positive meta-nodes are calculated based on the MST to obtain the negative nodes between the positives.
+\item Upon these negative nodes again a MST is calculated from which the path with the highest score, regarding node scores of negative nodes and the positive meta-nodes
+they connect, gives the resulting approximated module. 
+\end{enumerate}
+To validate the performance of the heuristic we simulate artificial signal modules. For this we use the 
+induced subnetwork of the HPRD-network comprising the genes present on the hgu133a Affymetrix chip.
+Within this network we set artificial signal modules of biological relevant sizes of 30 and 150 nodes, respectively; the remaining genes are considered 
+as background noise. For all considered genes we simulate microarray data and analyze subsequently the simulated gene expression data analogously 
+to the real expression analysis.
+We scan a large range of FDRs between 0 and 0.8 and evaluate the obtained solutions in terms of
+recall (true positive rate) and precision (ratio of true positives to
+all positively classified), for the optimal solution, our heuristic and a heuristic implemented in the Cytoscape plugin \emph{jActiveModules} \citet{Ideker2002}.
+The results of the heuristic implemented in the \BioNet package are clearly closer to the optimal solutions, than the results of the other heuristical approach.
+Especially for a strong signal with 150 genes, our heuristic yields a good approximation of the maximum-scoring subnetwork.  
+
+\begin{center}
+\includegraphics[width=0.49\textwidth]{prec_recall_small.pdf}
+\includegraphics[width=0.49\textwidth]{prec_recall_large.pdf}
+\captionof{figure}{Performance validation. Plot of the recall vs.\ precision of a batch of solutions calculated for a wide range of FDRs (colouring scheme) 
+with three replications each, for the exact solution and two heuristics. For the algorithm by \citet{Ideker2002} we display the 6 convex hulls (triangles) of solutions 
+(solutions 5 and 6 partially overlap) obtained by applying it recursively to five independent simulations. We evaluated two different signal 
+component sizes (30, left plot and 150, right plot) with the same procedure. Clearly, the presented exact approach (solid line) captures the signal with 
+high precision and recall over a relatively large range of FDRs. The results of the \BioNet heuristic algorithm (dotted line) are much closer to the optimal solution over the entire range of FDRs compared to the \emph{jActiveModules} heuristic;
+in particular, in the important region of high recall and precision.}
+\label{fig:validation} 
+\end{center}
+
+
+\section{Diffuse Large B-cell Lymphoma Study}\label{sec:dbcl} 
+Integrated network analysis not only focuses on the structure (topology) of the underlying graph but 
+integrates external information in terms of node and edge attributes. Here we exemplify how an integrative network analysis can be performed
+using a protein-protein interaction network, microarray and clinical (survival) data, for details see \citet{Dittrich2008}.
+
+\subsection{The data}
+First, we load the microarray data and interactome data which is available as expression set and a graph 
+object from the \BioNet package. The graph objects can be either in the \emph{graphNEL} format, which is used in the package
+\texttt{graph} and \texttt{RBGL} \citep{Gentleman2009, Carey2009, Carey2005} or in the \emph{igraph} format from the package \texttt{igraph} \citep{Csardi2006}.
+
+<<>>=
+library(BioNet)
+library(DLBCL)
+data(exprLym)
+data(interactome)
+@
+
+Here we use the published gene expression data set from diffuse large B-cell lymphomas (DLBCL) \citep{Rosenwald2002}. 
+In particular, gene expression data from 112 tumors with the germinal center B-like phenotype (GCB DLBCL) and from 
+82 tumors with the activated B-like phenotype (ABC DLBCL) are included in this study. The expression data has been 
+precompiled in an \texttt{ExpressionSet} structure.
+
+<<>>=
+exprLym
+@
+
+For the network data we use a data set of literature-curated human protein-protein interactions obtained from HPRD \citep{Prasad2009}. 
+Altogether the entire network used here comprises \Sexpr{numNodes(interactome)} nodes and \Sexpr{numEdges(interactome)} edges. 
+
+<<>>=
+interactome
+@
+
+From this we derive a \emph{Lymphochip}-specific interactome network as the vertex-induced subgraph extracted by the 
+subset of  genes for which we have expression data on the \emph{Lymphochip}. This can easily be done, using the \texttt{subNetwork} command.
+%<<echo=false, results=tex>>=
+
+<<>>=
+network <- subNetwork(featureNames(exprLym), interactome)
+network
+@
+
+Since we want to identify modules as connected subgraphs we focus on the largest connected component.
+
+<<>>=
+network <- largestComp(network)
+network
+@
+
+So finally we derive a \emph{Lymphochip} network which comprises \Sexpr{numNodes(network)} nodes and \Sexpr{numEdges(network)} edges.
+
+\subsection{Calculating the p-values}
+
+\paragraph{Differential expression}
+In the next step we use \texttt{rowttest} from the package \texttt{genefilter} to analyse differential expression between the ABC and GCB subtype:
+
+<<>>=
+library(genefilter)
+library(impute)
+expressions <- impute.knn(exprs(exprLym))$data
+t.test <- rowttests(expressions, fac=exprLym$Subgroup)
+@
+
+<<results=hide>>=
+t.test[1:10, ]
+@
+
+The result looks as follows:\\
+\footnotesize
+
+\begin{center}
+<<echo=F, results=tex>>= 
+library(xtable)
+top.table <- xtable(t.test[1:10,], display=c("s", "f", "f", "f"))
+print(top.table, floating=FALSE)                                    
+@
+\end{center}
+
+\normalsize
+
+\paragraph{Survival analysis} The survival analysis implemented in the package \emph{survival} can be used to
+assess the risk association of each gene and calculate the associated p-values. As this will take some time, we here 
+use the precalculated p-values from the \BioNet package.
+
+<<>>=
+data(dataLym)
+ttest.pval <- t.test[, "p.value"]
+surv.pval <- dataLym$s.pval
+names(surv.pval) <- dataLym$label
+pvals <- cbind(ttest.pval, surv.pval)
+@
+
+\subsection{Calculation of the score}
+
+We have obtained two p-values for each gene, for differential expression and survival relevance.
+Next we aggregate these two p-values for each gene into one p-value of p-values using order statistics.
+The function \texttt{aggrPvals} calculates the second order statistic of the p-values for each gene. 
+
+<<>>=
+pval <- aggrPvals(pvals, order=2, plot=FALSE)
+@
+
+Now we can use the aggregated p-values to fit the Beta-uniform mixture model to the distribution. 
+The following plot shows the fitted Beta-uniform mixture model in a histogram of the p-values.
+
+
+<<>>=
+fb <- fitBumModel(pval, plot=FALSE)
+fb   
+@
+\begin{center}
+<<fig=F>>=
+dev.new(width=13, height=7)
+par(mfrow=c(1,2))
+hist(fb)
+plot(fb)
+dev.off()
+@
+\includegraphics[width=\textwidth]{bum1.pdf}
+\captionof{figure}{Histogram of p-values, overlayed by the fitted BUM model coloured in red and the $\pi$-upper bound displayed as a blue line. The right plot shows a 
+quantile-quantile plot, indicating a nice fit of the BUM model to the p-value distribution.}
+\label{fig:hist_lymphoma}
+\end{center}
+
+The quantile-quantile plot indicates that the BUM model fits nicely to the p-value distribution.
+A plot of the log-likelihood surface can be obtained with \texttt{plotLLSurface}. 
+It shows the mixture parameter $\lambda$ (x-axis) and the shape parameter a (y-axis) of
+the Beta-uniform mixture model. The circle in the plot depicts the maximum-likelihood 
+estimates for $\lambda$ and a. 
+
+\begin{center}
+<<fig=T>>=
+plotLLSurface(pval, fb)
+@
+\captionof{figure}{Log-likelihood surface plot. The range of the colours shows an increased log-likelihood 
+from red to white. Additionaly, the optimal parameters $\lambda$ and a for the BUM model are highlighted.}
+\label{fig:LLSurface_lymphoma}
+\end{center}
+
+The nodes of the network are now scored using the fitted BUM model and a \FDR of 0.001.
+
+<<>>=
+scores <- scoreNodes(network=network, fb=fb, fdr=0.001)
+@
+
+In the next step the network with the scores and edges is written to a file and the \heinz algorithm
+is used to calculate the maximum-scoring subnetwork. In order to run \heinz self-loops have to be 
+removed from the network.
+
+<<>>=
+network <- rmSelfLoops(network)                                                                                                     
+writeHeinzEdges(network=network, file="lymphoma_edges_001", use.score=FALSE)
+writeHeinzNodes(network=network, file="lymphoma_nodes_001", node.scores = scores)
+@ 
+
+\subsection{Calculation of the maximum-scoring subnetwork}\label{sec:mss}
+
+In the following the \heinz algorithm is started using the \texttt{heinz.py} python script.\\
+This starts the integer linear programming optimization and calculates the maximum-scoring 
+subnetwork using \texttt{CPLEX}.\\
+
+The command is: "heinz.py -e lymphoma\_edges\_001.txt -n \\
+lymphoma\_nodes\_001.txt -N True -E False"
+or \texttt{runHeinz} on a linux machine with CPLEX installed.\\
+
+The output is precalculated in \texttt{lymphoma\_nodes\_001.txt.0.hnz} and \\
+\texttt{lymphoma\_edges\_001.txt.0.hnz} in the 
+subdirectory "extdata" of the R \BioNet library directory.
+
+<<>>=
+datadir <- file.path(path.package("BioNet"), "extdata") 
+dir(datadir)
+@
+
+The output is loaded as a graph and plotted with the following commands:
+
+
+<<>>=
+module <- readHeinzGraph(node.file=file.path(datadir, "lymphoma_nodes_001.txt.0.hnz"), network=network)
+diff <- t.test[, "dm"]
+names(diff) <- rownames(t.test) 
+@
+\begin{center}
+<<fig=T>>=
+plotModule(module, diff.expr=diff, scores=scores)
+@
+\captionof{figure}{Resultant functional module for the lymphoma data set. Differential expression between ABC and GCB B-cell lymphoma is coloured 
+in red and green, where green shows an upregulation in ACB and red an upregulation in GBC. The shape of the nodes depicts the score: rectangles 
+indicate a negative score, circles a positive score.}
+\label{fig:module_lymphoma}
+\end{center}
+
+The log fold-changes are visualized by the colouring of the nodes, the shape of the nodes depicts the score (positive=circle, negative=square).
+It is also possible to visualize the module in 3D with the function \texttt{plot3dModule}, but for this the rgl package, a 3D real-time rendering system, has to be installed. The plot can be saved to pdf-file with the function \texttt{save3dModule}. And the resulting module would look as following.
+
+\begin{center}
+\includegraphics[width=\textwidth]{Tutorial-3dplot}
+\captionof{figure}{3D visualization of the same functional module  shown in \ref{fig:module_lymphoma}. Here, only the scores are depicted
+ by the colouring of the nodes, positives in red and negatives in green.}
+\label{fig:3dmodule_lymhoma}
+\end{center}
+
+The resulting subnetwork consists of \Sexpr{numNodes(module)} nodes and \Sexpr{numEdges(module)} edges.
+It has a cumulative sum of the scores of \Sexpr{round(sum(scores[nodes(module)]), 2)} from \Sexpr{sum(scores[nodes(module)]>0)} positive (coloured in red) 
+and \Sexpr{sum(scores[nodes(module)]<0)} negative nodes (coloured in green). 
+
+<<>>= 
+sum(scores[nodes(module)])
+sum(scores[nodes(module)]>0)
+sum(scores[nodes(module)]<0)
+@
+
+We capture an interactome module that has been described to
+play a major biological role in the GCB and ABC DLBCL subtypes. It includes for
+example, the proliferation module which is more highly expressed in
+the ABC DLBCL subtype \citep{Rosenwald2002} comprising the genes: MYC, CCNE1, CDC2, APEX1,
+DNTTIP2, and PCNA. Likewise, genes IRF4, TRAF2, and BCL2, which are
+associated with the potent and oncogenic NF$\kappa$B pathway. 
+
+\section{ALL Study}
+\label{sec:ALL}
+This section describes the integrated network approach applied to the analysis of Affymetrix microrray data. In addition to the previous section, the 
+data is analysed for differential expression using the package \texttt{limma} \citep{Smyth2005}. The resulting module can be exported in various formats 
+and for example displayed with Cytoscape \citep{Shannon2003}.  
+
+\subsection{The data}
+First, we load the microarray data and the human interactome data, which is available as a graph 
+object from the \BioNet package. The popular Acute Lymphoblastic Leukemia (ALL) data set \citep{Chiaretti2004} with 128 arrays is used 
+as an example for an Affymetrix single-channel microarray. 
+This data is available in the package \texttt{ALL} \citep{Huber2006} as a normalised \texttt{ExpressionSet}.
+
+<<>>=
+library(BioNet)
+library(DLBCL)
+library(ALL)
+data(ALL)
+data(interactome)
+@
+
+The mircroarray data gives results from 128 samples of patients with T-cell ALL or B-cell ALL using Affymetrix hgu95av2 arrays. 
+Aim of the integrated analysis is to capture significant genes in a functional module, all of which are potentially involved in acute lymphoblastic leukemia and show
+a significant difference in expression between the B- and T-cell samples. 
+
+<<>>=
+ALL
+@
+
+
+%\section{The Network}
+For the network data we use a data set of literature-curated human protein-protein interactions that have been obtained from HPRD \citep{Prasad2009}. 
+Altogether the entire network used here comprises \Sexpr{numNodes(interactome)} nodes and \Sexpr{numEdges(interactome)} edges. 
+
+<<>>=
+interactome
+@
+
+In the next step we have to map the Affymetrix identifiers to the protein identifiers of the PPI network.
+Since several probesets represent one gene, we have to select one or concatenate them into one gene.
+One possibility is to use the probeset with the highest variance for each gene. This is accomplished for the \texttt{ExpressionSet}
+with the \texttt{mapByVar}. It also maps the Affymetrix IDs to the identifiers of the network using the chip annotations and network geneIDs, 
+which are unique, and returns the network names in the expression matrix. This reduces the expression matrix to the genes which are present 
+in the network. Please note that the number of nodes and edges in the network and resulting module can slightly vary depending on the version of chip annotation used. 
+
+<<>>=
+mapped.eset <- mapByVar(ALL, network=interactome, attr="geneID")
+mapped.eset[1:5,1:5]
+@
+
+The data set is reduced to \Sexpr{dim(mapped.eset)[1]} genes. To find out how many genes are contained in the human interactome we calculate the intersect.
+
+<<>>=
+length(intersect(rownames(mapped.eset), nodes(interactome)))
+@
+
+Since the human interactome contains \Sexpr{length(intersect(rownames(mapped.eset), nodes(interactome)))} genes from the chip we can either
+extract a subnetwork with the method \texttt{subNetwork} or preceed with the whole network. Automatically the negative expectation value 
+is used later when deriving the scores for the nodes without intensity values. We continue by extracting the 
+subnetwork. Furthermore, we want to identify modules as connected subgraphs, therefore we use the largest connected component of the 
+network and remove existing self-loops.
+
+<<>>=
+network <- subNetwork(rownames(mapped.eset), interactome)
+network
+network <- largestComp(network)
+network <- rmSelfLoops(network)
+network
+@
+
+%\paragraph{Description}
+So finally we derive a \emph{chip-specific} network which comprises \Sexpr{numNodes(network)} nodes and \Sexpr{numEdges(network)} edges.
+
+\subsection{Calculating the p-values}
+\label{sec:ALL_pvals}
+
+\paragraph{Differential expression}
+In the next step we use \texttt{limma} \citep{Smyth2005} to analyse differential expression between the B-cell and T-cell groups.
+
+<<>>=
+library(limma)
+design <- model.matrix(~ -1+ factor(c(substr(unlist(ALL$BT), 0, 1))))
+colnames(design)<- c("B", "T")
+contrast.matrix <- makeContrasts(B-T, levels=design)
+contrast.matrix 
+fit <- lmFit(mapped.eset, design)
+fit2 <- contrasts.fit(fit, contrast.matrix)
+fit2 <- eBayes(fit2)
+@
+
+We get the corresponding p-values and and calculate the scores thereupon. 
+
+<<>>= 
+pval <- fit2$p.value[,1]                                
+@
+
+\subsection{Calculation of the score}
+
+We have obtained the p-values for each gene for differential expression.
+Next, the p-values are used to fit the Beta-uniform mixture model to their distribution \citep{Pounds2003,Dittrich2008}. 
+The following plot shows the fitted Beta-uniform mixture model in a histogram of the p-values.
+The quantile-quantile plot indicates that the BUM model fits to the p-value distribution. Although the data shows a slight deviation from
+the expected values, we continue with the fitted parameters.
+
+<<>>=
+fb <- fitBumModel(pval, plot=FALSE)
+fb
+@
+\begin{center}
+<<fig=F>>=
+dev.new(width=13, height=7)
+par(mfrow=c(1,2))
+hist(fb)
+plot(fb)
+@
+
+\includegraphics[width=\textwidth]{bum2.pdf}
+\captionof{figure}{Histogram of p-values, overlayed by the fitted BUM model in red and the $\pi$-upper bound displayed as a blue line. The right plot shows a 
+quantile-quantile plot, in which the estimated p-values from the model fit deviate slightly from the observed p-values.}
+\label{fig:Hist_ALL}
+\end{center}
+
+The nodes of the network are now scored using the fitted BUM model and a \FDR  of 1e-14.
+Such a low \FDR  was chosen to obtain a small module, which can be visualized. 
+
+<<>>=
+scores <- scoreNodes(network=network, fb=fb, fdr=1e-14)
+@
+
+In the next step the network with the scores and edges is written to file and the \heinz algorithm
+is used to calculate the maximum-scoring subnetwork. 
+
+<<>>=
+writeHeinzEdges(network=network, file="ALL_edges_001", use.score=FALSE)
+writeHeinzNodes(network=network, file="ALL_nodes_001", node.scores = scores)
+@ 
+
+\subsection{Calculation of the maximum-scoring subnetwork} \label{sec:mss2}
+
+In the following the \heinz algorithm is started using the \texttt{heinz.py} python script. 
+A new implementation Heinz v2.0 is also available at \url{https://software.cwi.nl/software/heinz}
+, with slightly different and additional options.
+This starts the integer linear programming optimization and calculates the maximum-scoring 
+subnetwork using \texttt{CPLEX}.\\
+
+The command is: "heinz.py -e ALL\_edges\_001.txt -n ALL\_nodes\_001.txt -N True -E False"
+or \texttt{runHeinz} on a linux machine with CPLEX installed.\\
+
+The output is precalculated in \texttt{ALL\_nodes\_001.txt.0.hnz} and \\
+\texttt{ALL\_edges\_001.txt.0.hnz} in the R \BioNet 
+directory, subdirectory extdata.
+
+The output is loaded as a graph with the following commands:
+
+
+<<>>=
+datadir <- file.path(path.package("BioNet"), "extdata") 
+module <- readHeinzGraph(node.file=file.path(datadir, "ALL_nodes_001.txt.0.hnz"), network=network)
+@
+
+Attributes are added to the module, to depict the difference in expression and the score later.
+
+<<>>= 
+nodeDataDefaults(module, attr="diff") <- ""
+nodeData(module, n=nodes(module), attr="diff") <- fit2$coefficients[nodes(module),1]
+nodeDataDefaults(module, attr="score") <- ""
+nodeData(module, n=nodes(module), attr="score") <- scores[nodes(module)]
+nodeData(module)[1]
+@
+
+We save the module as XGMML file and look at it with the software Cytoscape \citep{Shannon2003}, colouring the node by their "diff" attribute
+and changing the node shape according to the "score".
+
+<<>>=
+saveNetwork(module, file="ALL_module", type="XGMML")
+@
+
+The resulting network with \Sexpr{numNodes(module)} nodes and \Sexpr{numEdges(module)} edges and coloured nodes, looks like this:
+
+\begin{center}
+\includegraphics[width=\textwidth]{cytoscape.pdf}
+\captionof{figure}{Resultant module visualized in Cytoscape. Significantly upregulated genes are coloured in red, genes that show 
+significant downregulation are coloured in green, for the contrast B vs. T cells. The score of the nodes is shown by the shape of the 
+nodes, circles indicate a positive score, diamonds a negative score.}
+\label{fig:Cytoscape}
+\end{center}
+
+The module comprises several parts, one part showing a high upregulation in the B-T contrast (CD79A, BLNK, CD19, CD9, CD79B) participates in B cell 
+activation and differentiation and response to stimuli according to their GO annotation. While the other large upregulated part is involved in antigen 
+processing and presentation and immune response (HLA-DMA, HLA-DPA1, CD4, HLA-DMB, HLA-DRB5, HLA-DPB1). T cell/leukocyte activating genes 
+(CD3D, CD3G, CD3Z, ENO2, TRAT1, ZAP70) are coloured in green. The lower middle part is involved in negative regulation of apoptosis, 
+developmental processes and programmed cell death. 
+Most of them are involved in overall immune system processes and as expected, mostly B and T cell specific genes comprise the
+resulting module, as this contrast was used for the test of differential expression.
+
+\section{Consensus modules}
+To assess the variation inherent in the integrated data, we use a jackknife resampling procedure resulting in an ensemble of optimal modules. A consensus approach summarizes the ensemble into one final module containing maximally robust nodes and edges. The resulting consensus module visualizes variable regions by assigning support values to nodes and edges. The consensus module is calculated using the acute lymphoblastic leukemia data from the previous section.
+
+First, we perform the same steps as explained in \ref{sec:ALL} and start with the data obtained up to subsection \ref{sec:ALL_pvals}. We use the \emph{chip-specific} network which comprises \Sexpr{numNodes(network)} nodes and \Sexpr{numEdges(network)} edges and the ALL microarray dataset.
+
+\subsection{Calculating the p-values}
+\paragraph{Differential expression}
+We resample the microarrays and calculate p-values using a standard two-sided t-test for the differential expression between the B-cell and T-cell groups. 100 jackknife replicates are created and used to test for differential expression.\\
+
+Depending on the number of resamples the next steps can take a while.
+
+<<eval=F>>=
+j.repl <- 100
+resampling.pvals <- list()
+for(i in 1:j.repl)
+{
+  resampling.result <- resamplingPvalues(exprMat=mapped.eset, groups=factor(c(substr(unlist(ALL$BT), 0, 1))), resampleMat=FALSE, alternative="two.sided")
+  resampling.pvals[[i]] <- resampling.result$p.values
+  print(i)
+}
+@
+
+We use the obtained p-values to calculate scores thereupon. 
+
+\subsection{Calculation of the score}
+
+For each jackknife replicate a BUM model is fitted to the p-value distribution, which is used to calculate node scores. The same \FDR as before is used. 
+
+<<eval=F>>=
+fb <- lapply(resampling.pvals, fitBumModel, plot=FALSE, starts=1)
+resampling.scores <- c()
+for(i in 1:j.repl)
+{
+  resampling.scores[[i]] <- scoreNodes(network=network, fb=fb[[i]], fdr=1e-14)
+}
+@
+
+We create a matrix of scores to calculate the modules. This creates one node file as input for the ILP calculation. Alternatively one node file can be created for each jackknife resample, which then can be run in parallel on a cluster or multicore machine. This approach is preferable, due to possibly many jackknife resamples. For simplification we use the matrix variant here.
+
+<<eval=F>>=
+score.mat <- as.data.frame(resampling.scores)
+colnames(score.mat) <- paste("resample", (1:j.repl), sep="")
+@
+
+The node scores are written to file in the next step. For the edge scores the binary interactions are written to file with a score of 0.
+
+<<eval=F>>=
+writeHeinzEdges(network=network, file="ALL_e_resample", use.score=FALSE)
+writeHeinzNodes(network=network, file="ALL_n_resample", node.scores = score.mat)
+@ 
+
+\subsection{Calculation of the optimal subnetworks} \label{sec:mss2}
+
+In the following the \heinz algorithm is started using the \texttt{heinz.py} python script. This starts the integer linear programming optimization and calculates the maximum-scoring subnetwork using \texttt{CPLEX}. In contrast to previous calculations we define a size the resulting modules should have. We set it with the size parameter s to the size of the original module, which was 31. This fixes the size of the output modules for a later consensus module calculation.\\
+
+The command is: "heinz.py -e ALL\_e\_resample.txt -n ALL\_n\_resample.txt -N True -E False -S 31"\\
+
+The output is precalculated in \texttt{ALL\_n\_resample.txt.0.hnz} and
+\texttt{ALL\_e\_resample.txt.0.hnz} in the R \BioNet 
+directory, subdirectory extdata. The output is loaded as a list of graphs with the following commands:
+
+<<>>=
+datadir <- file.path(path.package("BioNet"), "extdata") 
+modules <- readHeinzGraph(node.file=file.path(datadir, "ALL_n_resample.txt.0.hnz"), network=network)
+@
+
+\subsection{Calculation of the consensus module} \label{sec:mss2}
+
+We have obtained now 100 modules from the resampled data. These are used to calculate consensus scores for the nodes and edges of the network and recalculate an optimal module. This module, termed consensus module, captures the variance in the microarray data and depicts the robust solution. Confidence values for the nodes and edges can be visualized by the node size and edge width, allowing to identify stable parts of the module.\\
+
+We therefore use the modules to calculate consensus scores in the following and rescore the network:
+
+<<>>=
+cons.scores <- consensusScores(modules, network)
+writeHeinz(network=network, file="ALL_cons", node.scores=cons.scores$N.scores, edge.scores=cons.scores$E.scores)
+@
+
+They are run using CPLEX: "heinz.py -e ALL\_cons\_e.txt -n ALL\_cons\_n.txt -N True -E True -S 31". Mind to also use the edge scores with -E True.\\
+
+The results are loaded in R and visualized.
+
+<<>>=
+datadir <- file.path(path.package("BioNet"), "extdata") 
+cons.module <- readHeinzGraph(node.file=file.path(datadir, "ALL_cons_n.txt.0.hnz"), network=network)
+cons.edges <- sortedEdgeList(cons.module)
+E.width <- 1+cons.scores$E.freq[cons.edges]*10
+N.size <- 1+cons.scores$N.freq[nodes(cons.module)]*10
+@
+
+\begin{center}
+<<fig=T>>=
+plotModule(cons.module, edge.width=E.width, vertex.size=N.size, edge.label=cons.scores$E.freq[cons.edges]*100, edge.label.cex=0.6)
+@
+\captionof{figure}{Resultant consensus module. The size of the nodes and the width of the edges depict the robustness of this node or edge as calculated from the jackknife replicates.}
+\label{fig:module1}
+\end{center}
+
+
+\section{Installation}\label{sec:installation}
+
+\subsection{The \BioNet package}
+The \BioNet package is freely available from Bioconductor at \\
+http://www.bioconductor.org.
+
+\subsection{External code to call CPLEX}
+The algorithm to identify the optimal scoring subnetwork is based on the software dhea (district heating) from
+\citet{Ljubi'c2006}. The C++ code was extended in order to generate
+suboptimal solutions and is controlled over a Python script. The dhea code uses the commercial
+CPLEX callable library version 9.030 by ILOG, Inc. (Sunnyvale,CA). 
+In order to calculate the optimal solution a CPLEX library is needed. The other routines, the dhea code and heinz.py Python script (current version 1.63) are
+publicly available for academic and research purposes within the heinz (heaviest induced subgraph) package of the open source library
+LiSA (\url{http://www.planet-lisa.net}).
+The dhea code has to be included in the same folder as heinz.py, in order to call the routine by the Python code.
+To calculate the maximum-scoring subnetwork without an available CPLEX license a heuristic is included in the \BioNet package, see \texttt{runFastHeinz}.\\
+\textbf{The new version of Heinz v2.0 is available at \url{https://software.cwi.nl/software/heinz}.}
+
+\bibliographystyle{plainnat}
+\bibliography{Tutorials}
+
+\end{document}
+
+
+
+
+

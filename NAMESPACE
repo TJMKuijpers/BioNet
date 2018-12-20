@@ -1,0 +1,30 @@
+import(igraph)
+import(AnnotationDbi)
+import(Biobase)
+
+# I/O functions
+export(saveNetwork, loadNetwork.sif, loadNetwork.tab) 
+
+# Graph functions
+export(rmSelfLoops, makeNetwork, subNetwork, largestComp, largestScoreComp, permutateNodes, compareNetworks, getEdgeList)
+
+# Heinz functions
+export(writeHeinzEdges, writeHeinzNodes, writeHeinz, runHeinz, scanFDR, readHeinzTree, readHeinzGraph, runFastHeinz)
+
+# Microarray functions
+export(mapByVar) 
+
+# Plot function
+export(plot.bum, hist.bum, plotLLSurface, plotModule, plot3dModule, save3dModule)
+
+# Statistic functions
+export(aggrPvals, fbum, fbumLL, bumOptim, print.bum, summary.bum, fitBumModel, fdrThreshold, piUpper, scoreOffset, scoreFunction, scoreNodes, getCompScores)
+
+# Resampling functions
+export(resamplingPvalues, consensusScores, sortedEdgeList)
+
+# S3 methods
+S3method(print, bum)
+S3method(summary, bum)
+S3method(hist, bum)
+S3method(plot, bum)

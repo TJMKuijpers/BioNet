@@ -1,0 +1,31 @@
+Package: BioNet
+Type: Package
+Title: Routines for the functional analysis of biological networks
+Version: 1.38.0
+Date: 2015-09-11
+Author: Marcus Dittrich and Daniela Beisser
+Maintainer: Marcus Dittrich
+ <marcus.dittrich@biozentrum.uni-wuerzburg.de>
+Description: This package provides functions for the integrated
+        analysis of protein-protein interaction networks and the
+        detection of functional modules. Different datasets can be
+        integrated into the network by assigning p-values of
+        statistical tests to the nodes of the network. E.g. p-values
+        obtained from the differential expression of the genes from an
+        Affymetrix array are assigned to the nodes of the network. By
+        fitting a beta-uniform mixture model and calculating scores
+        from the p-values, overall scores of network regions can be
+        calculated and an integer linear programming algorithm
+        identifies the maximum scoring subnetwork.
+License: GPL (>= 2)
+Depends: R (>= 2.10.0), graph, RBGL
+Suggests: rgl, impute, DLBCL, genefilter, xtable, ALL, limma,
+        hgu95av2.db, XML
+Imports: igraph (>= 1.0.1), AnnotationDbi, Biobase
+LazyLoad: yes
+URL: http://bionet.bioapps.biozentrum.uni-wuerzburg.de/
+biocViews: Microarray, DataImport, GraphAndNetwork, Network,
+        NetworkEnrichment, GeneExpression, DifferentialExpression
+NeedsCompilation: no
+Packaged: 2017-10-31 00:06:11 UTC; biocbuild
+Built: R 3.4.2; ; 2017-10-31 03:12:51 UTC; windows

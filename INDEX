@@ -1,0 +1,51 @@
+BioNet-package          Routines for the functional analysis of
+                        biological networks
+aggrPvals               Aggregate several p-values into one p-value
+bumOptim                Fitting a beta-uniform mixture model to p-value
+                        distribution
+compareNetworks         Compare parameters of two networks
+consensusScores         Calculation of a consensus score for a network
+fbum                    Compute the density of the bum distribution
+fbumLL                  Calculate log likelihood of BUM model
+fdrThreshold            Calculate p-value threshold for given FDR
+fitBumModel             Fit beta-uniform mixture model to a p-value
+                        distribution
+getCompScores           Partition scores for subgraphs of the network
+getEdgeList             Get representation of graph as edgelist
+hist.bum                Histogram of the p-value distribution with the
+                        fitted bum model
+largestComp             Extract largest component of network
+largestScoreComp        Component with largest score
+loadNetwork.sif         Load network from Cytoscape sif file
+loadNetwork.tab         Load network from tabular format
+makeNetwork             Create graph from source and target vectors
+mapByVar                Select probeset by variance and get PPI ID
+permutateNodes          Permute node labels
+piUpper                 Upper bound pi for the fraction of noise
+plot.bum                Quantile-quantile plot for the beta-uniform
+                        mixture model
+plot3dModule            3D plot of the network
+plotLLSurface           Log likelihood surface plot
+plotModule              Plot of the network
+print.bum               Print information about bum model
+pvaluesExample          Example p-values for aggregation statistics
+readHeinzGraph          Convert HEINZ output to graph
+readHeinzTree           Convert HEINZ output to tree
+resamplingPvalues       Resampling of microarray expression values and
+                        test for differential expression.
+rmSelfLoops             Remove self-loops in a graph
+runFastHeinz            Calculate heuristically maximum scoring
+                        subnetwork
+runHeinz                Start HEINZ
+save3dModule            Save a 3D plot of the network
+saveNetwork             Save undirected network in various formats
+scanFDR                 Dataframe of scores over a given range of FDRs
+scoreFunction           Scoring function for p-values
+scoreNodes              Score the nodes of a network
+scoreOffset             Change score offset for 2 FDRs
+sortedEdgeList          Get a sorted edgelist
+subNetwork              Create a subGraph
+summary.bum             Print summary of informations about bum model
+writeHeinz              Write input files for HEINZ
+writeHeinzEdges         Write edge input file for HEINZ
+writeHeinzNodes         Write node input file for HEINZ
